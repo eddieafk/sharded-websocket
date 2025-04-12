@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chunk/Shard WebSocket Client</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+        
+        .container {
+            background-color: white;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        
+        .status-container {
+            margin-top: 20px;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            background-color: #f9f9f9;
+        }
+        
+        .connection-status {
+            padding: 5px 10px;
+            border-radius: 3px;
+            font-weight: bold;
+            display: inline-block;
+        }
+        
+        .connected {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        
+        .disconnected {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+        
+        .connecting {
+            background-color: #fff3cd;
+            color: #856404;
+        }
+        
+        .form-group {
+            margin-bottom: 15px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        
+        input[type="text"] {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        
+        button {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        
+        button:hover {
+            background-color: #45a049;
+        }
+        
+        button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+        
+        .messages {
+            margin-top: 20px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            height: 300px;
+            overflow-y: auto;
+            padding: 10px;
+            background-color: #f9f9f9;
+        }
+        
+        .message {
+            margin-bottom: 8px;
+            padding: 8px;
+            border-radius: 4px;
+        }
+        
+        .sent {
+            background-color: #e3f2fd;
+            text-align: right;
+            border-right: 3px solid #2196f3;
+        }
+        
+        .received {
+            background-color: #f1f1f1;
+            border-left: 3px solid #9e9e9e;
+        }
+        
+        .error {
+            background-color: #ffebee;
+            border-left: 3px solid #f44336;
+            color: #f44336;
+        }
+        
+        .system-info {
+            margin-top: 20px;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            background-color: #e8f5e9;
+        }
+        
+        .chunk-info {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 10px;
+        }
+        
+        .chunk-card {
+            background-color: white;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 10px;
+            flex: 1 0 200px;
+            max-width: calc(33% - 10px);
+        }
+        
+        pre {
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+        
+        .tabs {
+            display: flex;
+            margin-bottom: 10px;
+            border-bottom: 1px solid #ddd;
+        }
+        
+        .tab {
+            padding: 10px 15px;
+            cursor: pointer;
+            background-color: #f1f1f1;
+            border-radius: 5px 5px 0 0;
+            margin-right: 5px;
+        }
+        
+        .tab.active {
+            background-color: #fff;
+            border: 1px solid #ddd;
+            border-bottom: 1px solid #fff;
+            margin-bottom: -1px;
+        }
+        
+        .tab-content {
+            display: none;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Chunk/Shard WebSocket Client</h1>
+        
+        <div class="tabs">
+            <div class="tab active" data-tab="connection">Bağlantı</div>
+            <div class="tab" data-tab="system">Sistem Bilgisi</div>
+        </div>
+        
+        <div class="tab-content active" id="connection-tab">
+            <div class="status-container">
+                <div>
+                    <strong>Durum:</strong> 
+                    <span class="connection-status disconnected" id="connection-status">Bağlantı Yok</span>
+                </div>
+                <div id="connection-info"></div>
+            </div>
+            
+            <div class="form-group">
+                <label for="controller-url">Main Controller URL:</label>
+                <input type="text" id="controller-url" value="http://localhost:2999" />
+            </div>
+            
+            <div>
+                <button id="connect-btn">Bağlan</button>
+                <button id="disconnect-btn" disabled>Bağlantıyı Kes</button>
+            </div>
+            
+            <div class="form-group" style="margin-top: 20px;">
+                <label for="message">Mesaj:</label>
+                <input type="text" id="message" disabled placeholder="Mesajınızı buraya yazın..." />
+            </div>
+            
+            <button id="send-btn" disabled>Gönder</button>
+            
+            <div class="messages" id="messages"></div>
+        </div>
+        
+        <div class="tab-content" id="system-tab">
+            <button id="refresh-info-btn">Sistem Bilgisini Yenile</button>
+            
+            <div class="system-info" id="system-info">
+                <p>Sistem bilgisi henüz yüklenmedi.</p>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        let socket = null;
+        let currentChunkId = null;
+        let currentShardId = null;
+        
+        const controllerUrlInput = document.getElementById('controller-url');
+        const connectBtn = document.getElementById('connect-btn');
+        const disconnectBtn = document.getElementById('disconnect-btn');
+        const messageInput = document.getElementById('message');
+        const sendBtn = document.getElementById('send-btn');
+        const messagesContainer = document.getElementById('messages');
+        const connectionStatus = document.getElementById('connection-status');
+        const connectionInfo = document.getElementById('connection-info');
+        const refreshInfoBtn = document.getElementById('refresh-info-btn');
+        const systemInfo = document.getElementById('system-info');
+        
+        // Tab değiştirme işlevi
+        document.querySelectorAll('.tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                // Aktif tab sınıfını kaldır
+                document.querySelectorAll('.tab').forEach(t => {
+                    t.classList.remove('active');
+                });
+                
+                // Tüm tab içeriklerini gizle
+                document.querySelectorAll('.tab-content').forEach(content => {
+                    content.classList.remove('active');
+                });
+                
+                // Seçilen tabı ve içeriğini aktif yap
+                tab.classList.add('active');
+                const tabId = tab.getAttribute('data-tab');
+                document.getElementById(`${tabId}-tab`).classList.add('active');
+                
+                // Sistem tabı seçildiyse bilgileri yenile
+                if (tabId === 'system') {
+                    fetchSystemInfo();
+                }
+            });
+        });
+        
+        // Bağlantı butonuna tıklama işlevi
+        connectBtn.addEventListener('click', connect);
+        
+        // Bağlantıyı kesme butonuna tıklama işlevi
+        disconnectBtn.addEventListener('click', disconnect);
+        
+        // Mesaj gönderme butonuna tıklama işlevi
+        sendBtn.addEventListener('click', sendMessage);
+        
+        // Enter tuşuna basınca mesaj gönderme
+        messageInput.addEventListener('keyup', (event) => {
+            if (event.key === 'Enter') {
+                sendMessage();
+            }
+        });
+        
+        // Sistem bilgisini yenileme butonuna tıklama işlevi
+        refreshInfoBtn.addEventListener('click', fetchSystemInfo);
+        
+        // Ana controller'dan optimal chunk bilgisini al ve bağlan
+        async function connect() {
+            if (socket) {
+                addMessage('Zaten bağlı durumdasınız.', 'error');
+                return;
+            }
+            
+            const controllerUrl = controllerUrlInput.value.trim();
+            if (!controllerUrl) {
+                addMessage('Lütfen geçerli bir controller URL girin.', 'error');
+                return;
+            }
+            
+            try {
+                updateConnectionStatus('connecting', 'Bağlanıyor...');
+                
+                // Ana controller'dan en uygun chunk bilgisini al
+                const response = await fetch(`${controllerUrl}/api/connect`);
+                const data = await response.json();
+                
+                if (data.status !== 'success') {
+                    throw new Error(data.message || 'Bağlantı bilgisi alınamadı.');
+                }
+                
+                const { chunkId, port, connectionUrl } = data;
+                
+                // WebSocket bağlantısını kur
+                socket = new WebSocket(connectionUrl);
+                currentChunkId = chunkId;
+                
+                // WebSocket olaylarını dinle
+                socket.onopen = () => {
+                    updateConnectionStatus('connected', 'Bağlandı');
+                    connectionInfo.innerHTML = `<strong>Chunk ID:</strong> ${chunkId} | <strong>Port:</strong> ${port}`;
+                    
+                    connectBtn.disabled = true;
+                    disconnectBtn.disabled = false;
+                    messageInput.disabled = false;
+                    sendBtn.disabled = false;
+                    
+                    addMessage(`WebSocket bağlantısı kuruldu. Chunk: ${chunkId}, Port: ${port}`, 'system');
+                };
+                
+                socket.onmessage = (event) => {
+                    try {
+                        const data = JSON.parse(event.data);
+                        
+                        // Shard ID bilgisini güncelle
+                        if (data.metadata && data.metadata.shardId) {
+                            currentShardId = data.metadata.shardId;
+                            connectionInfo.innerHTML = `<strong>Chunk ID:</strong> ${currentChunkId} | <strong>Shard ID:</strong> ${currentShardId} | <strong>Port:</strong> ${port}`;
+                        }
+                        
+                        // Mesajı ekrana ekle
+                        const formattedMessage = `<pre>${JSON.stringify(data, null, 2)}</pre>`;
+                        addMessage(formattedMessage, 'received');
+                        
+                    } catch (err) {
+                        addMessage(`Alınan veri: ${event.data}`, 'received');
+                    }
+                };
+                
+                socket.onclose = () => {
+                    updateConnectionStatus('disconnected', 'Bağlantı Kesildi');
+                    connectionInfo.innerHTML = '';
+                    
+                    connectBtn.disabled = false;
+                    disconnectBtn.disabled = true;
+                    messageInput.disabled = true;
+                    sendBtn.disabled = true;
+                    
+                    socket = null;
+                    currentChunkId = null;
+                    currentShardId = null;
+                    
+                    addMessage('WebSocket bağlantısı kapatıldı.', 'system');
+                };
+                
+                socket.onerror = (error) => {
+                    updateConnectionStatus('disconnected', 'Bağlantı Hatası');
+                    addMessage(`WebSocket hatası: ${error.message || 'Bilinmeyen hata'}`, 'error');
+                };
+                  
+            } catch (err) {
+                updateConnectionStatus('disconnected', 'Bağlantı Hatası');
+                addMessage(`Bağlantı hatası: ${err.message}`, 'error');
+            }
+        }
+        
+        // Bağlantıyı kapat
+        function disconnect() {
+            if (socket) {
+                socket.close();
+            }
+        }
+        
+        // Mesaj gönder
+        function sendMessage() {
+            if (!socket || socket.readyState !== WebSocket.OPEN) {
+                addMessage('Mesaj göndermek için önce bağlanın.', 'error');
+                return;
+            }
+            
+            const message = messageInput.value.trim();
+            if (!message) {
+                return;
+            }
+            
+            try {
+                // JSON formatında mesaj gönder
+                const messageObj = {
+                    text: message,
+                    timestamp: Date.now()
+                };
+                
+                socket.send(JSON.stringify(messageObj));
+                addMessage(`<pre>${JSON.stringify(messageObj, null, 2)}</pre>`, 'sent');
+                
+                messageInput.value = '';
+            } catch (err) {
+                addMessage(`Mesaj gönderme hatası: ${err.message}`, 'error');
+            }
+        }
+        
+        // Mesajı ekrana ekle
+        function addMessage(message, type = 'system') {
+            const messageElement = document.createElement('div');
+            messageElement.className = `message ${type}`;
+            messageElement.innerHTML = message;
+            
+            messagesContainer.appendChild(messageElement);
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+        
+        // Bağlantı durumunu güncelle
+        function updateConnectionStatus(status, text) {
+            connectionStatus.className = `connection-status ${status}`;
+            connectionStatus.textContent = text;
+        }
+        
+        // Sistem bilgisini getir
+        async function fetchSystemInfo() {
+            const controllerUrl = controllerUrlInput.value.trim();
+            if (!controllerUrl) {
+                systemInfo.innerHTML = '<p>Controller URL geçerli değil.</p>';
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${controllerUrl}/api/system/info`);
+                const data = await response.json();
+                
+                // Sistem bilgilerini göster
+                let html = `
+                    <h3>Sistem Genel Durumu</h3>
+                    <div>
+                        <strong>Toplam Chunk Sayısı:</strong> ${data.totalChunks} / ${data.maxChunks}<br>
+                        <strong>Toplam Bağlantı Sayısı:</strong> ${data.totalConnections}
+                    </div>
+                    
+                    <h3>Chunklar</h3>
+                    <div class="chunk-info">
+                `;
+                
+                // Her chunk için kart oluştur
+                data.chunks.forEach(chunk => {
+                    const loadPercentage = Math.round(
+                        (chunk.load.connections * 0.4 + 
+                         chunk.load.messageRate * 0.4 + 
+                         chunk.load.cpuUsage * 0.2) * 100
+                    );
+                    
+                    html += `
+                        <div class="chunk-card">
+                            <strong>ID:</strong> ${chunk.id}<br>
+                            <strong>Port:</strong> ${chunk.port}<br>
+                            <strong>Shard Sayısı:</strong> ${chunk.shardCount}<br>
+                            <strong>Bağlantı Sayısı:</strong> ${chunk.connections}<br>
+                            <strong>Mesaj Oranı:</strong> ${chunk.load.messageRate.toFixed(2)}/s<br>
+                            <strong>CPU Kullanımı:</strong> ${(chunk.load.cpuUsage * 100).toFixed(2)}%<br>
+                            <strong>Yük:</strong> ${loadPercentage}%
+                        </div>
+                    `;
+                });
+                
+                html += '</div>';
+                systemInfo.innerHTML = html;
+                
+            } catch (err) {
+                systemInfo.innerHTML = `<p>Sistem bilgisi alınamadı: ${err.message}</p>`;
+            }
+        }
+        
+        // Sayfa yüklendiğinde sistem bilgisini otomatik getir
+        document.addEventListener('DOMContentLoaded', () => {
+            // Sistem bilgisini periyodik olarak güncelle (30 saniyede bir)
+            fetchSystemInfo();
+            setInterval(fetchSystemInfo, 30000);
+        });
+    </script>
+</body>
+</html>

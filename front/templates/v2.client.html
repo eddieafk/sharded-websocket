@@ -1,0 +1,828 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebSocket Cluster Monitör</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f5f7fa;
+            color: #333;
+        }
+        
+        header {
+            background-color: #2c3e50;
+            color: white;
+            padding: 1rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        h1 {
+            margin: 0;
+            font-size: 1.5rem;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 1rem;
+        }
+        
+        .dashboard {
+            display: grid;
+            grid-template-columns: 1fr 2fr;
+            gap: 1rem;
+        }
+        
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+        
+        .stat-card {
+            background-color: white;
+            border-radius: 8px;
+            padding: 1rem;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .stat-card h2 {
+            margin: 0;
+            font-size: 1rem;
+            color: #7f8c8d;
+        }
+        
+        .stat-value {
+            font-size: 2rem;
+            font-weight: bold;
+            color: #2c3e50;
+            margin: 0.5rem 0;
+        }
+        
+        .control-panel {
+            background-color: white;
+            border-radius: 8px;
+            padding: 1rem;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            grid-row: span 2;
+        }
+        
+        .chunks-container {
+            background-color: white;
+            border-radius: 8px;
+            padding: 1rem;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .chunk {
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 1rem;
+            margin-bottom: 1rem;
+            transition: all 0.3s ease;
+            position: relative;
+        }
+        
+        .chunk.active {
+            border-left: 4px solid #27ae60;
+        }
+        
+        .chunk.draining {
+            border-left: 4px solid #f39c12;
+            background-color: #fff9e6;
+        }
+        
+        .chunk.closing {
+            border-left: 4px solid #e74c3c;
+            background-color: #ffebeb;
+            opacity: 0.7;
+        }
+        
+        .chunk-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 0.5rem;
+        }
+        
+        .chunk-title {
+            font-weight: bold;
+            font-size: 1.1rem;
+        }
+        
+        .status-badge {
+            border-radius: 12px;
+            padding: 0.2rem 0.6rem;
+            font-size: 0.8rem;
+            font-weight: 500;
+        }
+        
+        .status-active {
+            background-color: #e6f7ef;
+            color: #27ae60;
+        }
+        
+        .status-draining {
+            background-color: #fff5e0;
+            color: #f39c12;
+        }
+        
+        .status-closing {
+            background-color: #ffebeb;
+            color: #e74c3c;
+        }
+        
+        .chunk-metrics {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 0.5rem;
+            margin-top: 1rem;
+        }
+        
+        .metric {
+            background-color: #f8f9fa;
+            padding: 0.5rem;
+            border-radius: 4px;
+        }
+        
+        .metric-name {
+            font-size: 0.8rem;
+            color: #7f8c8d;
+            margin-bottom: 0.2rem;
+        }
+        
+        .metric-value {
+            font-weight: 500;
+        }
+        
+        .load-bar {
+            height: 6px;
+            background-color: #ecf0f1;
+            border-radius: 3px;
+            margin-top: 0.5rem;
+            overflow: hidden;
+        }
+        
+        .load-progress {
+            height: 100%;
+            transition: width 0.3s ease;
+        }
+        
+        .low-load {
+            background-color: #27ae60;
+        }
+        
+        .medium-load {
+            background-color: #f39c12;
+        }
+        
+        .high-load {
+            background-color: #e74c3c;
+        }
+        
+        .control-panel h3 {
+            margin-top: 0;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 0.5rem;
+        }
+        
+        .actions {
+            margin-top: 1rem;
+        }
+        
+        button {
+            background-color: #3498db;
+            color: white;
+            border: none;
+            padding: 0.6rem 1rem;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 500;
+            margin-right: 0.5rem;
+            margin-bottom: 0.5rem;
+            transition: background-color 0.2s;
+        }
+        
+        button:hover {
+            background-color: #2980b9;
+        }
+        
+        button.danger {
+            background-color: #e74c3c;
+        }
+        
+        button.danger:hover {
+            background-color: #c0392b;
+        }
+        
+        .log-panel {
+            margin-top: 1rem;
+            max-height: 200px;
+            overflow-y: auto;
+            background-color: #2c3e50;
+            color: #ecf0f1;
+            border-radius: 4px;
+            padding: 0.5rem;
+            font-family: monospace;
+        }
+        
+        .log-entry {
+            margin: 0;
+            padding: 0.2rem 0;
+            border-bottom: 1px solid #34495e;
+            font-size: 0.85rem;
+        }
+        
+        .log-time {
+            color: #95a5a6;
+        }
+        
+        .log-info {
+            color: #3498db;
+        }
+        
+        .log-warn {
+            color: #f39c12;
+        }
+        
+        .log-error {
+            color: #e74c3c;
+        }
+        
+        .log-success {
+            color: #2ecc71;
+        }
+        
+        .connections-chart {
+            width: 100%;
+            height: 150px;
+            margin-top: 1rem;
+        }
+        
+        .chart-container {
+            margin-top: 1rem;
+            background-color: white;
+            border-radius: 8px;
+            padding: 1rem;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .shard-list {
+            margin-top: 0.5rem;
+            font-size: 0.85rem;
+        }
+        
+        .shard-item {
+            padding: 0.3rem 0.5rem;
+            background-color: #f5f7fa;
+            border-radius: 4px;
+            margin-top: 0.3rem;
+            display: flex;
+            justify-content: space-between;
+        }
+        
+        .connection-count {
+            font-weight: 500;
+        }
+        
+        /* Animation for scaling events */
+        @keyframes highlight {
+            0% { background-color: rgba(52, 152, 219, 0.2); }
+            100% { background-color: transparent; }
+        }
+        
+        .highlight {
+            animation: highlight 2s ease;
+        }
+        
+        .system-status {
+            display: flex;
+            align-items: center;
+        }
+        
+        .status-indicator {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+        
+        .status-healthy {
+            background-color: #2ecc71;
+        }
+        
+        .status-warning {
+            background-color: #f39c12;
+        }
+        
+        .status-error {
+            background-color: #e74c3c;
+        }
+        
+        .event-timeline {
+            margin-top: 1rem;
+        }
+        
+        .event {
+            padding: 0.5rem;
+            margin-bottom: 0.5rem;
+            border-radius: 4px;
+            font-size: 0.9rem;
+        }
+        
+        .event-scale-up {
+            background-color: #e6f7ef;
+            border-left: 3px solid #27ae60;
+        }
+        
+        .event-scale-down {
+            background-color: #fff5e0;
+            border-left: 3px solid #f39c12;
+        }
+        
+        .event-error {
+            background-color: #ffebeb;
+            border-left: 3px solid #e74c3c;
+        }
+        
+        .refresh-timer {
+            font-size: 0.8rem;
+            color: #7f8c8d;
+            margin-top: 1rem;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>WebSocket Cluster Monitör</h1>
+        <div class="system-status">
+            <div class="status-indicator status-healthy"></div>
+            <span>Sistem Aktif</span>
+        </div>
+    </header>
+    
+    <div class="container">
+        <div class="dashboard">
+            <div>
+                <div class="stats">
+                    <div class="stat-card">
+                        <h2>Toplam Chunk</h2>
+                        <div class="stat-value" id="total-chunks">0</div>
+                    </div>
+                    <div class="stat-card">
+                        <h2>Aktif Bağlantılar</h2>
+                        <div class="stat-value" id="total-connections">0</div>
+                    </div>
+                    <div class="stat-card">
+                        <h2>Sistem Yükü</h2>
+                        <div class="stat-value" id="system-load">0%</div>
+                    </div>
+                    <div class="stat-card">
+                        <h2>Bellek Kullanımı</h2>
+                        <div class="stat-value" id="memory-usage">0 MB</div>
+                    </div>
+                </div>
+                
+                <div class="chart-container">
+                    <h3>Bağlantı İstatistikleri</h3>
+                    <canvas id="connections-chart" class="connections-chart"></canvas>
+                </div>
+                
+                <div class="chunks-container">
+                    <h3>Chunk Durumu</h3>
+                    <div id="chunks-list">
+                        <!-- Chunks will be dynamically added here -->
+                    </div>
+                </div>
+            </div>
+            
+            <div class="control-panel">
+                <h3>Kontrol Paneli</h3>
+                
+                <div class="actions">
+                    <button id="refresh-btn">Yenile</button>
+                    <button id="create-chunk-btn">Yeni Chunk Oluştur</button>
+                    <button id="toggle-auto-refresh">Otomatik Yenileme: Açık</button>
+                </div>
+                
+                <div class="event-timeline">
+                    <h4>Olaylar</h4>
+                    <div id="events-list">
+                        <!-- Events will be dynamically added here -->
+                    </div>
+                </div>
+                
+                <h4>Sistem Günlüğü</h4>
+                <div class="log-panel" id="log-panel">
+                    <!-- Log entries will be dynamically added here -->
+                </div>
+                
+                <div class="refresh-timer">
+                    Sonraki yenileme: <span id="refresh-countdown">5</span> saniye
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.7.0/chart.min.js"></script>
+    <script>
+        // Configuration
+        const API_BASE_URL = 'http://localhost:2999/api';
+        let autoRefresh = true;
+        let refreshInterval = 5000; // 5 seconds
+        let refreshTimer;
+        let refreshCountdown;
+        
+        // Chart data and configuration
+        let connectionsChart;
+        let chartData = {
+            labels: [],
+            datasets: [{
+                label: 'Toplam Bağlantılar',
+                data: [],
+                borderColor: '#3498db',
+                backgroundColor: 'rgba(52, 152, 219, 0.1)',
+                tension: 0.4,
+                fill: true
+            }]
+        };
+        
+        // Store historical data
+        const historyData = {
+            timestamps: [],
+            connections: [],
+            chunks: []
+        };
+        
+        // Initialize application
+        document.addEventListener('DOMContentLoaded', () => {
+            initializeChart();
+            fetchSystemInfo();
+            setupEventListeners();
+            startAutoRefresh();
+            
+            // Add initial log entry
+            addLogEntry('Sistem başlatıldı', 'info');
+        });
+        
+        function initializeChart() {
+            const ctx = document.getElementById('connections-chart').getContext('2d');
+            connectionsChart = new Chart(ctx, {
+                type: 'line',
+                data: chartData,
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: true,
+                            position: 'top'
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: 'Bağlantı Sayısı'
+                            }
+                        },
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Zaman'
+                            }
+                        }
+                    }
+                }
+            });
+        }
+        
+        function setupEventListeners() {
+            // Refresh button
+            document.getElementById('refresh-btn').addEventListener('click', () => {
+                fetchSystemInfo();
+                addLogEntry('Manuel yenileme yapıldı', 'info');
+            });
+            
+            // Create new chunk button
+            document.getElementById('create-chunk-btn').addEventListener('click', () => {
+                createNewChunk();
+            });
+            
+            // Toggle auto refresh
+            document.getElementById('toggle-auto-refresh').addEventListener('click', toggleAutoRefresh);
+        }
+        
+        function toggleAutoRefresh() {
+            autoRefresh = !autoRefresh;
+            const button = document.getElementById('toggle-auto-refresh');
+            button.textContent = `Otomatik Yenileme: ${autoRefresh ? 'Açık' : 'Kapalı'}`;
+            
+            if (autoRefresh) {
+                startAutoRefresh();
+                addLogEntry('Otomatik yenileme açıldı', 'info');
+            } else {
+                stopAutoRefresh();
+                addLogEntry('Otomatik yenileme kapatıldı', 'info');
+            }
+        }
+        
+        function startAutoRefresh() {
+            if (refreshTimer) {
+                clearInterval(refreshTimer);
+            }
+            
+            if (refreshCountdown) {
+                clearInterval(refreshCountdown);
+            }
+            
+            refreshTimer = setInterval(fetchSystemInfo, refreshInterval);
+            
+            // Countdown timer
+            let seconds = refreshInterval / 1000;
+            document.getElementById('refresh-countdown').textContent = seconds;
+            
+            refreshCountdown = setInterval(() => {
+                seconds--;
+                if (seconds < 0) {
+                    seconds = refreshInterval / 1000;
+                }
+                document.getElementById('refresh-countdown').textContent = seconds;
+            }, 1000);
+        }
+        
+        function stopAutoRefresh() {
+            if (refreshTimer) {
+                clearInterval(refreshTimer);
+                refreshTimer = null;
+            }
+            
+            if (refreshCountdown) {
+                clearInterval(refreshCountdown);
+                refreshCountdown = null;
+            }
+        }
+        
+        async function fetchSystemInfo() {
+            try {
+                const response = await fetch(`${API_BASE_URL}/system/info`);
+                const data = await response.json();
+                updateDashboard(data);
+                updateChart(data);
+                
+                // Store historical data
+                historyData.timestamps.push(new Date().toLocaleTimeString());
+                historyData.connections.push(data.totalConnections);
+                historyData.chunks.push(data.activeChunks);
+                
+                // Keep only the last 20 data points
+                if (historyData.timestamps.length > 20) {
+                    historyData.timestamps.shift();
+                    historyData.connections.shift();
+                    historyData.chunks.shift();
+                }
+                
+            } catch (error) {
+                addLogEntry(`API çağrısı başarısız: ${error.message}`, 'error');
+                updateSystemStatus('error');
+            }
+        }
+        
+        function updateDashboard(data) {
+            // Update stats
+            document.getElementById('total-chunks').textContent = data.activeChunks;
+            document.getElementById('total-connections').textContent = data.totalConnections;
+            document.getElementById('system-load').textContent = `${Math.round(data.systemLoad.cpu * 100)}%`;
+            document.getElementById('memory-usage').textContent = `${data.systemLoad.memory.toFixed(1)} MB`;
+            
+            // Update chunks list
+            updateChunksList(data.chunks);
+            
+            // Update system status
+            updateSystemStatus(calculateSystemStatus(data));
+        }
+        
+        function updateChunksList(chunks) {
+            const chunksContainer = document.getElementById('chunks-list');
+            chunksContainer.innerHTML = '';
+            
+            if (chunks.length === 0) {
+                chunksContainer.innerHTML = '<p>Henüz chunk bulunmuyor.</p>';
+                return;
+            }
+            
+            chunks.forEach(chunk => {
+                const chunkElement = document.createElement('div');
+                chunkElement.className = `chunk ${chunk.status}`;
+                chunkElement.id = `chunk-${chunk.id}`;
+                
+                const loadClass = getLoadClass(chunk.load.loadFactor);
+                
+                chunkElement.innerHTML = `
+                    <div class="chunk-header">
+                        <div class="chunk-title">${chunk.id} (Port: ${chunk.port})</div>
+                        <div class="status-badge status-${chunk.status}">${getStatusText(chunk.status)}</div>
+                    </div>
+                    
+                    <div class="load-bar">
+                        <div class="load-progress ${loadClass}" style="width: ${chunk.load.loadFactor * 100}%"></div>
+                    </div>
+                    
+                    <div class="chunk-metrics">
+                        <div class="metric">
+                            <div class="metric-name">Bağlantılar</div>
+                            <div class="metric-value">${chunk.connections}</div>
+                        </div>
+                        <div class="metric">
+                            <div class="metric-name">Shard Sayısı</div>
+                            <div class="metric-value">${chunk.shardCount}</div>
+                        </div>
+                        <div class="metric">
+                            <div class="metric-name">Mesaj Oranı</div>
+                            <div class="metric-value">${chunk.load.messageRate.toFixed(1)}/s</div>
+                        </div>
+                        <div class="metric">
+                            <div class="metric-name">CPU Kullanımı</div>
+                            <div class="metric-value">${Math.round(chunk.load.cpuUsage * 100)}%</div>
+                        </div>
+                    </div>
+                    
+                    <div class="metric">
+                        <div class="metric-name">Yük Durumu</div>
+                        <div class="metric-value">${Math.round(chunk.load.loadFactor * 100)}%</div>
+                    </div>
+                    
+                    ${chunk.idleTime !== "0s" ? `
+                    <div class="metric">
+                        <div class="metric-name">Boşta Kalma Süresi</div>
+                        <div class="metric-value">${chunk.idleTime}</div>
+                    </div>
+                    ` : ''}
+                `;
+                
+                chunksContainer.appendChild(chunkElement);
+            });
+        }
+        
+        function updateChart(data) {
+            // Update chart with historical data
+            chartData.labels = historyData.timestamps;
+            chartData.datasets[0].data = historyData.connections;
+            
+            // Add second dataset for chunk count
+            if (chartData.datasets.length === 1) {
+                chartData.datasets.push({
+                    label: 'Aktif Chunk Sayısı',
+                    data: historyData.chunks,
+                    borderColor: '#27ae60',
+                    backgroundColor: 'rgba(39, 174, 96, 0.1)',
+                    tension: 0.4,
+                    fill: true
+                });
+            } else {
+                chartData.datasets[1].data = historyData.chunks;
+            }
+            
+            connectionsChart.update();
+        }
+        
+        function getLoadClass(loadFactor) {
+            if (loadFactor < 0.3) return 'low-load';
+            if (loadFactor < 0.7) return 'medium-load';
+            return 'high-load';
+        }
+        
+        function getStatusText(status) {
+            switch (status) {
+                case 'active': return 'Aktif';
+                case 'draining': return 'Boşaltılıyor';
+                case 'closing': return 'Kapanıyor';
+                default: return status;
+            }
+        }
+        
+        function updateSystemStatus(status) {
+            const indicator = document.querySelector('.status-indicator');
+            const statusText = document.querySelector('.system-status span');
+            
+            indicator.className = 'status-indicator';
+            
+            switch (status) {
+                case 'healthy':
+                    indicator.classList.add('status-healthy');
+                    statusText.textContent = 'Sistem Aktif';
+                    break;
+                case 'warning':
+                    indicator.classList.add('status-warning');
+                    statusText.textContent = 'Sistem Uyarı';
+                    break;
+                case 'error':
+                    indicator.classList.add('status-error');
+                    statusText.textContent = 'Sistem Hatası';
+                    break;
+            }
+        }
+        
+        function calculateSystemStatus(data) {
+            // Simple logic to determine system status
+            if (data.systemLoad.cpu > 0.9) return 'error';
+            if (data.systemLoad.cpu > 0.7) return 'warning';
+            
+            // Check if any chunks are in error state
+            const hasErrorChunks = data.chunks.some(chunk => 
+                chunk.status === 'error'
+            );
+            
+            if (hasErrorChunks) return 'warning';
+            
+            return 'healthy';
+        }
+        
+        async function createNewChunk() {
+            try {
+                addLogEntry('Yeni chunk oluşturuluyor...', 'info');
+                
+                const response = await fetch(`${API_BASE_URL}/system/scale`, {
+                    method: 'POST'
+                });
+                
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    addLogEntry(`Yeni chunk oluşturuldu: ${data.chunkId} (Port: ${data.port})`, 'success');
+                    addEvent('scale-up', `Yeni chunk oluşturuldu: ${data.chunkId}`);
+                    
+                    // Refresh to show new chunk
+                    setTimeout(fetchSystemInfo, 500);
+                } else {
+                    addLogEntry(`Chunk oluşturma hatası: ${data.message}`, 'error');
+                }
+            } catch (error) {
+                addLogEntry(`Chunk oluşturma hatası: ${error.message}`, 'error');
+            }
+        }
+        
+        function addLogEntry(message, type = 'info') {
+            const logPanel = document.getElementById('log-panel');
+            const now = new Date().toLocaleTimeString();
+            
+            const logEntry = document.createElement('p');
+            logEntry.className = `log-entry log-${type}`;
+            logEntry.innerHTML = `<span class="log-time">[${now}]</span> ${message}`;
+            
+            logPanel.appendChild(logEntry);
+            logPanel.scrollTop = logPanel.scrollHeight;
+            
+            // Limit log entries to prevent browser slowdown
+            while (logPanel.children.length > 100) {
+                logPanel.removeChild(logPanel.firstChild);
+            }
+        }
+        
+        function addEvent(type, message) {
+            const eventsContainer = document.getElementById('events-list');
+            const now = new Date().toLocaleTimeString();
+            
+            const eventElement = document.createElement('div');
+            eventElement.className = `event event-${type}`;
+            eventElement.innerHTML = `<strong>${now}</strong>: ${message}`;
+            
+            eventsContainer.prepend(eventElement);
+            
+            // Limit events to keep the UI clean
+            while (eventsContainer.children.length > 10) {
+                eventsContainer.removeChild(eventsContainer.lastChild);
+            }
+        }
+        
+        // Listen for scaling events
+        // This would normally come from a WebSocket connection to the server
+        // For demo purposes, we'll simulate events
+        function simulateScalingEvent() {
+            // Simulate a scale-down event after 30 seconds
+            setTimeout(() => {
+                addEvent('scale-down', 'Düşük yüklü chunk-2 ve chunk-3, chunk-1\'e birleştirildi');
+                addLogEntry('İki chunk birleştirildi: chunk-2, chunk-3 -> chunk-1', 'warn');
+                fetchSystemInfo();
+            }, 30000);
+            
+            // Simulate an error event after 45 seconds
+            setTimeout(() => {
+                addEvent('error', 'chunk-4 bağlantı hatası: Zaman aşımı');
+                addLogEntry('WebSocket hatası: chunk-4 zaman aşımı nedeniyle yeniden başlatılıyor', 'error');
+                fetchSystemInfo();
+            }, 45000);
+        }
+        
+        // Call simulation function if you want to demo events
+        // simulateScalingEvent();
+    </script>
+</body>
+</html>
